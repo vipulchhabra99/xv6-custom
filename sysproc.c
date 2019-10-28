@@ -75,6 +75,24 @@ sys_sbrk(void)
   return addr;
 }
 
+extern int setpriority(int,int);
+
+int
+sys_setpriority(void){
+  int pid, pr;
+  if(argint(0, &pid) < 0)
+    return -1;
+  if(argint(1, &pr) < 0)
+    return -1;
+
+  if(pr < 0 || pr > 100){
+    cprintf("Invalid Priority range\n");
+    return -1;
+  }
+
+  return setpriority(pid, pr);
+}
+
 int
 sys_sleep(void)
 {

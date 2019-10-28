@@ -48,11 +48,13 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
-  char name[16];               // Process name (debugging)
+  char name[16];
+  int priority;               // Process name (debugging)
   int ctime;                   // Creation Time
   int etime;                   // End Time
   int rtime;                   // Run Time
   int iotime;                  // I/o time
+  int clicks;                  // Unknown
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -60,3 +62,4 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+struct proc* findNewProcess(int *index,int *index1,int *index2,int *index3,int *index4,uint *priority);

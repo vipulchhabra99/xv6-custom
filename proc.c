@@ -7,6 +7,19 @@
 #include "proc.h"
 #include "spinlock.h"
 
+
+struct proc* q0[64];
+struct proc* q1[64];
+struct proc* q2[64];
+struct proc* q3[64];
+struct proc* q4[64];
+
+int c0 =-1;
+int c1=-1;
+int c2=-1;
+int c3=-1;
+int clkPerPrio[4] ={1,2,4,8,16};
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -65,6 +78,25 @@ myproc(void) {
   return p;
 }
 
+int
+setpriority(int pid,int priority){
+  struct proc *p;
+  int old_priority = 0;
+  acquire(&ptable.lock);
+
+  for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
+    if(p->pid == pid){
+      old_priority = p->priority;
+      p->priority = priority;
+      break;
+    }
+  }
+
+  release(&ptable.lock);
+
+  return old_priority;
+}
+
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
@@ -81,6 +113,11 @@ allocproc(void)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == UNUSED)
       goto found;
+  
+  p->priority = 0;
+  p->clicks = 0;
+  c0++;
+  q0[c0] = p;
 
   release(&ptable.lock);
   return 0;
@@ -88,6 +125,17 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+
+  #ifdef PBS
+    p->priority = 60;
+  #else
+  #ifdef MLFQ
+    p->priority = 0;
+    p->clicks = 0;
+    c0++;
+    q0[c0] = p;
+  #endif
+  p->ctime = ticks;
 
   release(&ptable.lock);
 
@@ -134,6 +182,7 @@ userinit(void)
     panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->sz = PGSIZE;
+  p->ctime = ticks;
   memset(p->tf, 0, sizeof(*p->tf));
   p->tf->cs = (SEG_UCODE << 3) | DPL_USER;
   p->tf->ds = (SEG_UDATA << 3) | DPL_USER;
@@ -368,6 +417,12 @@ waitx(int *wtime,int *rtime)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+
+void
+addToRear(struct proc **q, struct proc* p,int *c){
+    *q[*c] = *p;
+    (*c)++;
+}
 void
 scheduler(void)
 {
@@ -382,22 +437,97 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+
+      #ifdef DEFAULT
+        if(p->state != RUNNABLE)
+          continue;
+      #else
+      #ifdef FCFS
+        struct proc *minp = 0;
+
+        if(p->state != RUNNABLE)
+          continue;
+
+        if(p->pid > 1){
+          if(minp != 0){
+            if(p->ctime < minp->ctime)
+              minp = p;
+          }
+
+          else
+            minp = p;
+        }
+
+        //cprintf("Creation time %d\n",minp->ctime);
+
+        if(minp != 0)
+          p = minp;
+
+      #else
+      #ifdef PBS
+
+          struct proc *high_priority = 0;
+          struct proc *p1 = 0;
+
+          if(p->state != RUNNABLE){
+              continue;
+          }
+
+          high_priority = p;
+
+          for(p1 = ptable.proc;p1 < &ptable.proc[NPROC];p1++){
+              if((p1->state == RUNNABLE) && (high_priority->priority > p1->priority))
+                high_priority = p1;
+          }
+
+          if(high_priority->priority > p1->priority)
+            high_priority = p1;
+
+          p = high_priority;
+
+      #else
+      #ifdef MLFQ
+
+          struct proc *fp = 0;
+
+          uint priority = 0;
+
+          int index = 0,index1 = 0,index2 = 0,index3 = 0,index4 = 0;
+
+          fp = findNewProcess(&index,&index1,&index2,&index3,&index4,priority);
+
+          if(fp != 0){
+            p = fp;
+          }
+
+          else{
+            if(p->state != RUNNABLE){
+              continue;
+            }
+          }
+
+
+      #endif
+      #endif
+      #endif
+      #endif
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+      if(p > 0){
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
     }
     release(&ptable.lock);
 
@@ -581,3 +711,61 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+#ifdef MLFQ
+
+struct proc* findNewProcess(int *index,int *index1,int *index2,int *index3,int *index4,uint *priority){
+
+  int i,
+  struct proc * proc2;
+
+  notfound:
+    for(i = 0;i < NPROC;i++){
+      switch(*priority){
+        case 0:
+          proc2 = &ptable.proc[(*index + i)%NPROC];
+          if (proc2->state == RUNNABLE && proc2->priority == *priority){
+            *index = (*index + 1 + i) % NPROC;
+            return proc2;
+          }
+
+        case 1:
+          proc2 = &ptable.proc[(*index1 + i)%NPROC];
+          if(proc2->state == RUNNABLE && proc2->priority == *priority){
+            *index1 = (*index1 + 1 + i) % NPROC;
+            return proc2;
+          }
+
+        case 2:
+          proc2 = &ptable.proc[(*index2 + i)%NPROC];
+          if(proc2->state == RUNNABLE && proc2->priority == *priority){
+            *index2 = (*index2 + 1 + i) % NPROC;
+            return proc2;
+          }
+
+        case 3:
+          proc2 = &ptable.proc[(*index3 + i)%NPROC];
+          if(proc2->state == RUNNABLE && proc2->priority == *priority){
+            *index3 = (*index3 + 1 + i) % NPROC;
+            return proc2;
+          }
+
+        case 4:
+          proc2 = &ptable.proc[(*index4 + i)%NPROC];
+          if(proc2->state == RUNNABLE && proc2->priority == *priority){
+            *index4 = (*index4 + 1 + i) % NPROC;
+            return proc2;
+          }
+      }
+    }
+
+    if(*priority == 4){
+      *priority = 4;
+      return 0;
+    } else {
+      *priority += 1;
+      goto notfound;
+    }
+    return 0;
+}
+#endif

@@ -12,12 +12,31 @@ main(void)
 {
   int pid, wpid;
 
+  setpriority(getpid(),1);
+
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
     open("console", O_RDWR);
   }
   dup(0);  // stdout
   dup(0);  // stderr
+
+  #ifdef DEFAULT
+      printf(1,"Scheduler policy : DEFAULT (ROUND ROBIN) \n");
+  #else
+  #ifdef FCFS
+      printf(1,"Scheduler policy : First Come First Serve \n");
+  #else
+  #ifdef PBS
+      printf(1,"Scheduler policy ; Priority Based\n");
+  #else
+  #ifdef MLFQ
+      printf(1,"Scheduler Policy :  Multilevel Feedback Queue\n");
+  #endif
+  #endif
+  #endif
+  #endif
+
 
   for(;;){
     printf(1, "init: starting sh\n");
