@@ -8,18 +8,6 @@
 #include "spinlock.h"
 
 
-struct proc* q0[64];
-struct proc* q1[64];
-struct proc* q2[64];
-struct proc* q3[64];
-struct proc* q4[64];
-
-int c0 =-1;
-int c1=-1;
-int c2=-1;
-int c3=-1;
-int clkPerPrio[4] ={1,2,4,8,16};
-
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -116,8 +104,8 @@ allocproc(void)
   
   p->priority = 0;
   p->clicks = 0;
-  c0++;
-  q0[c0] = p;
+  //c0++;
+  //q0[c0] = p;
 
   release(&ptable.lock);
   return 0;
@@ -128,12 +116,6 @@ found:
 
   #ifdef PBS
     p->priority = 60;
-  #else
-  #ifdef MLFQ
-    p->priority = 0;
-    p->clicks = 0;
-    c0++;
-    q0[c0] = p;
   #endif
   p->ctime = ticks;
 
@@ -419,11 +401,6 @@ waitx(int *wtime,int *rtime)
 //      via swtch back to the scheduler.
 
 void
-addToRear(struct proc **q, struct proc* p,int *c){
-    *q[*c] = *p;
-    (*c)++;
-}
-void
 scheduler(void)
 {
   struct proc *p;
@@ -485,29 +462,6 @@ scheduler(void)
 
           p = high_priority;
 
-      #else
-      #ifdef MLFQ
-
-          struct proc *fp = 0;
-
-          uint priority = 0;
-
-          int index = 0,index1 = 0,index2 = 0,index3 = 0,index4 = 0;
-
-          fp = findNewProcess(&index,&index1,&index2,&index3,&index4,priority);
-
-          if(fp != 0){
-            p = fp;
-          }
-
-          else{
-            if(p->state != RUNNABLE){
-              continue;
-            }
-          }
-
-
-      #endif
       #endif
       #endif
       #endif
@@ -711,61 +665,3 @@ procdump(void)
     cprintf("\n");
   }
 }
-
-#ifdef MLFQ
-
-struct proc* findNewProcess(int *index,int *index1,int *index2,int *index3,int *index4,uint *priority){
-
-  int i,
-  struct proc * proc2;
-
-  notfound:
-    for(i = 0;i < NPROC;i++){
-      switch(*priority){
-        case 0:
-          proc2 = &ptable.proc[(*index + i)%NPROC];
-          if (proc2->state == RUNNABLE && proc2->priority == *priority){
-            *index = (*index + 1 + i) % NPROC;
-            return proc2;
-          }
-
-        case 1:
-          proc2 = &ptable.proc[(*index1 + i)%NPROC];
-          if(proc2->state == RUNNABLE && proc2->priority == *priority){
-            *index1 = (*index1 + 1 + i) % NPROC;
-            return proc2;
-          }
-
-        case 2:
-          proc2 = &ptable.proc[(*index2 + i)%NPROC];
-          if(proc2->state == RUNNABLE && proc2->priority == *priority){
-            *index2 = (*index2 + 1 + i) % NPROC;
-            return proc2;
-          }
-
-        case 3:
-          proc2 = &ptable.proc[(*index3 + i)%NPROC];
-          if(proc2->state == RUNNABLE && proc2->priority == *priority){
-            *index3 = (*index3 + 1 + i) % NPROC;
-            return proc2;
-          }
-
-        case 4:
-          proc2 = &ptable.proc[(*index4 + i)%NPROC];
-          if(proc2->state == RUNNABLE && proc2->priority == *priority){
-            *index4 = (*index4 + 1 + i) % NPROC;
-            return proc2;
-          }
-      }
-    }
-
-    if(*priority == 4){
-      *priority = 4;
-      return 0;
-    } else {
-      *priority += 1;
-      goto notfound;
-    }
-    return 0;
-}
-#endif

@@ -62,4 +62,4 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
-struct proc* findNewProcess(int *index,int *index1,int *index2,int *index3,int *index4,uint *priority);
+//struct proc* findNewProcess(int *index,int *index1,int *index2,int *index3,int *index4,uint *priority);
