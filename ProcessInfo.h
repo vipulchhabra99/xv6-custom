@@ -8,5 +8,6 @@ struct ProcessInfo{
 	int state;
 	uint sz;
 	char name[16];
+    int priority;
 };
 #endif

@@ -27,6 +27,7 @@ int main(void)
 
 		printf(1, "%s",states[processInfoTable[i].state]);
 		printf(1, " %d %s", processInfoTable[i].sz,processInfoTable[i].name);
+        printf(1," %d",processInfoTable[i].priority);
 		printf(1, "\n");
 	}
 	exit();

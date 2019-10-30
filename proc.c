@@ -693,6 +693,7 @@ getprocs(struct ProcessInfo* processInfoTable){
     {
        processInfoTable[i].name[j] = p->name[j];
     }
+    processInfoTable[i].priority = p->priority;
   }
   p = 0;
   return count;
