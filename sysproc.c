@@ -6,6 +6,8 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "ProcessInfo.h"
+
 
 int
 sys_fork(void)
@@ -59,6 +61,16 @@ int
 sys_getpid(void)
 {
   return myproc()->pid;
+}
+
+int 
+sys_getprocs(void){
+  struct ProcessInfo *processInfoTable;
+  if(argptr(0,(char**)&processInfoTable,sizeof(struct ProcessInfo) * NPROC) < 0) {
+    return -1;
+  }
+  return getprocs(processInfoTable);
+
 }
 
 int
