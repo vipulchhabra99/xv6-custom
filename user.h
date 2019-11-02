@@ -26,6 +26,7 @@ int sleep(int);
 int uptime(void);
 int waitx(int *wtime , int *rtime );
 int setpriority(int,int);
+int getptable(int, void *);
 int getprocs(struct ProcessInfo* processInfoTable);
 
 // ulib.c

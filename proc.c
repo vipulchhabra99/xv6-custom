@@ -103,8 +103,6 @@ allocproc(void)
     if(p->state == UNUSED)
       goto found;
   
-  p->priority = 0;
-  p->clicks = 0;
   //c0++;
   //q0[c0] = p;
 
@@ -117,6 +115,10 @@ found:
 
   #ifdef PBS
     p->priority = 60;
+  #else
+  #ifdef MLFQ
+    p->priority = 0;
+  #endif
   #endif
   p->ctime = ticks;
 
@@ -147,6 +149,10 @@ found:
   p->etime = 0;
   p->iotime = 0;
   p->rtime = 0;
+  #ifdef MLFQ
+  p->ticks[0] = p->ticks[1] = p->ticks[2] = p->ticks[3] = 0;
+  p->lastScheduledOnTick = 0;
+  #endif
   return p;
 }
 
@@ -400,53 +406,21 @@ waitx(int *wtime,int *rtime)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-
+#ifdef PBS
 void
 scheduler(void)
 {
-  struct proc *p;
+  struct proc *p,*p1;
   struct cpu *c = mycpu();
   c->proc = 0;
   
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
+    struct proc *high_priority = 0;
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-
-      #ifdef DEFAULT
-        if(p->state != RUNNABLE)
-          continue;
-      #else
-      #ifdef FCFS
-        struct proc *minp = 0;
-
-        if(p->state != RUNNABLE)
-          continue;
-
-        if(p->pid > 1){
-          if(minp != 0){
-            if(p->ctime < minp->ctime)
-              minp = p;
-          }
-
-          else
-            minp = p;
-        }
-
-        //cprintf("Creation time %d\n",minp->ctime);
-
-        if(minp != 0)
-          p = minp;
-
-      #else
-      #ifdef PBS
-
-          struct proc *high_priority = 0;
-          struct proc *p1 = 0;
-
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
           if(p->state != RUNNABLE){
               continue;
           }
@@ -462,10 +436,6 @@ scheduler(void)
             high_priority = p1;
 
           p = high_priority;
-
-      #endif
-      #endif
-      #endif
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -488,6 +458,209 @@ scheduler(void)
 
   }
 }
+#else
+#ifdef MLFQ
+void
+scheduler(void)
+{
+  int i,j;
+  int lastScheduled = -1;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+
+  for(;;){
+    sti();
+    uint xticks;
+    acquire(&tickslock);
+    xticks = ticks;
+    release(&tickslock);
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+
+    // Priority boost
+      if(xticks % 100 == 0){
+        for(j = 0; j < NPROC; ++j){
+          if(j == lastScheduled || ptable.proc[j].state != RUNNABLE) continue;
+          if(ptable.proc[j].priority > 0 && xticks - ptable.proc[j].lastScheduledOnTick >= 100){
+            ptable.proc[j].priority--;
+          }
+        }
+      }
+
+    struct proc *procToSchedForPriority[4] = {0};
+    for(i = (lastScheduled + 1) % NPROC, j = 0; i != lastScheduled && j < NPROC; i = (i + 1) % NPROC, ++j){
+      if(ptable.proc[i].state == RUNNABLE){
+        if(!procToSchedForPriority[ptable.proc[i].priority]){
+          procToSchedForPriority[ptable.proc[i].priority] = &ptable.proc[i];
+        }
+      }
+    }
+    struct proc *p = 0;
+
+    // Run highest priority
+    int priority;
+    int lowestPriorityToSearch = lastScheduled == -1 ? 4 : ptable.proc[i].priority;
+    for(priority = 0; priority < lowestPriorityToSearch; ++priority){
+      if(procToSchedForPriority[priority]){
+        p = procToSchedForPriority[priority];
+        break;
+      }
+    }
+    if(!p){
+      // Check if time-slice of last scheduled proc complete
+      // If so, bump priority and schedule next proc at same or lower priority
+      // If not, then look through rest of priorities
+      int timeSliceComplete = 1;
+      int pticks = ptable.proc[lastScheduled].ticks[ptable.proc[lastScheduled].priority];
+      switch(ptable.proc[lastScheduled].priority){
+        case 0:
+        case 1:
+          timeSliceComplete = (pticks % 5 == 0 && pticks != 0);
+          
+          break;
+        case 2:
+          timeSliceComplete = (pticks % 10 == 0 && pticks != 0);
+          break;
+        case 3:
+          timeSliceComplete = (pticks % 20 == 0 && pticks != 0);
+          break;
+      }
+
+      if(ptable.proc[lastScheduled].priority < 3){
+        ptable.proc[lastScheduled].priority += timeSliceComplete;
+      }
+
+      if(!timeSliceComplete && ptable.proc[lastScheduled].state == RUNNABLE){
+        p = &ptable.proc[lastScheduled];
+      }
+      else{
+        // If there is no other proc at the last scheduled proc's priority,
+        // then we want to put the last run proc as the proc to run for that priority
+        if(!procToSchedForPriority[ptable.proc[lastScheduled].priority] && ptable.proc[lastScheduled].state == RUNNABLE)
+          procToSchedForPriority[ptable.proc[lastScheduled].priority] = &ptable.proc[lastScheduled];
+        // Check the rest of the priorities for a proc to run
+        for(; priority < 4; ++priority){
+          if(procToSchedForPriority[priority]){
+             p = procToSchedForPriority[priority];
+             break;
+          }
+        }
+      }
+
+      if(!p){
+        // If still nothing else, then reschedule
+        p = &ptable.proc[lastScheduled];
+      }
+    }
+
+    if(p){
+      p->lastScheduledOnTick = xticks;
+      lastScheduled = p - ptable.proc;
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&(c->scheduler), c->proc->context);
+      switchkvm();
+    }
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+    release(&ptable.lock);
+    
+  }
+}
+#else
+#ifdef FCFS
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    struct proc *minp = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        
+        if(p->state != RUNNABLE)
+          continue;
+
+        if(minp == 0)
+          minp = p;
+        else if(p->ctime < minp->ctime){
+          minp = p;
+        }
+    }
+
+    if(minp != 0){
+      c->proc = minp;
+      switchuvm(minp);
+      minp->state = RUNNING;
+      minp->rtime = ticks;
+      swtch(&(c->scheduler),c->proc->context);
+      switchkvm();
+    }
+    release(&ptable.lock);
+
+  }
+
+}
+#else
+#ifdef DEFAULT
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+
+     
+      if(p->state != RUNNABLE)
+        continue;
+     
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+
+      if(p > 0){
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        //cprintf("Process %s with pid %d running\n", p->name, p->pid);
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+    }
+    release(&ptable.lock);
+
+  }
+}
+#endif
+#endif
+#endif
+#endif
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -663,9 +836,14 @@ procdump(void)
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
+    cprintf(" %d",p->priority);
     cprintf("\n");
   }
 }
+struct proc * getptable_proc(void){
+  return ptable.proc;
+}
+
 int 
 getprocs(struct ProcessInfo* processInfoTable){
   struct proc *p;  
