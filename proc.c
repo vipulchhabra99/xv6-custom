@@ -14,7 +14,16 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct queue{
+  struct proc* head;
+  struct proc* tail;
+};
+
 static struct proc *initproc;
+
+struct queue proc_queue[5];
+
+int time_slice[5] = {1,2,4,8,16};
 
 int nextpid = 1;
 extern void forkret(void);
@@ -151,7 +160,17 @@ found:
   p->rtime = 0;
   #ifdef MLFQ
   p->ticks[0] = p->ticks[1] = p->ticks[2] = p->ticks[3] = 0;
-  p->lastScheduledOnTick = 0;
+  if(proc_queue[0].head == 0 && proc_queue[0].tail == 0){
+    proc_queue[0].head = p;
+    proc_queue[0].tail = p;
+  }
+
+  else{
+    proc_queue[0].tail->next = p;
+    proc_queue[0].tail = p;
+  }
+  p->next = 0;
+  p->lastScheduled = ticks;
   #endif
   return p;
 }
@@ -463,115 +482,137 @@ scheduler(void)
 void
 scheduler(void)
 {
-  int i,j;
-  int lastScheduled = -1;
+  struct proc *p;
   struct cpu *c = mycpu();
-  c->proc = 0;
+  int j;
+  int lastExecuted = -1;
 
-  for(;;){
+  for(;;) {
     sti();
-    uint xticks;
-    acquire(&tickslock);
-    xticks = ticks;
-    release(&tickslock);
-    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 
-    // Priority boost
-      if(xticks % 100 == 0){
-        for(j = 0; j < NPROC; ++j){
-          if(j == lastScheduled || ptable.proc[j].state != RUNNABLE) continue;
-          if(ptable.proc[j].priority > 0 && xticks - ptable.proc[j].lastScheduledOnTick >= 100){
+    int i,level;
+
+    for(i = 0;i < 5;i++){
+      struct proc *prev = 0;
+
+      if(ticks%100 == 0){
+      
+        for(j = 0;j < NPROC;++j){
+          if(ptable.proc[j].pid == lastExecuted || ptable.proc[j].state != RUNNABLE)
+          continue;
+
+          if(ptable.proc[j].priority > 0 && (ticks - ptable.proc[j].lastScheduled) >= 100){
+            level = ptable.proc[j].priority;
+            if((proc_queue[level].head == &ptable.proc[j]) && (proc_queue[level].tail == &ptable.proc[j])){
+              proc_queue[level].head = 0;
+              proc_queue[level].tail = 0;
+            }
+
+            else if(proc_queue[level].head == &ptable.proc[j]){
+              proc_queue[level].head = ptable.proc[j].next;
+            }
+
+            else {
+  
+              struct proc *k;
+              for(k = proc_queue[level].head;k != 0;){
+                if(k->next == &ptable.proc[j]){
+                  k->next = ptable.proc[j].next;
+                  break;
+                }
+                else{
+                  k = k->next;
+                }
+              }
+            }
+
             ptable.proc[j].priority--;
+            level = ptable.proc[j].priority;
+
+            if(proc_queue[level].head == 0 && proc_queue[level].tail == 0){
+              proc_queue[level].head = &ptable.proc[j];
+              proc_queue[level].tail = &ptable.proc[j]; 
+            } else{
+              proc_queue[level].tail->next = &ptable.proc[j];
+              proc_queue[level].tail = &ptable.proc[j];
+            }
+            i = -1;
+            break;
           }
         }
       }
 
-    struct proc *procToSchedForPriority[4] = {0};
-    for(i = (lastScheduled + 1) % NPROC, j = 0; i != lastScheduled && j < NPROC; i = (i + 1) % NPROC, ++j){
-      if(ptable.proc[i].state == RUNNABLE){
-        if(!procToSchedForPriority[ptable.proc[i].priority]){
-          procToSchedForPriority[ptable.proc[i].priority] = &ptable.proc[i];
-        }
-      }
-    }
-    struct proc *p = 0;
+      for(p = proc_queue[i].head;p != 0;){
+        if(p->state == RUNNABLE){
+          c->proc = p;
+          p->lastScheduled = ticks;
+          lastExecuted = p->pid;
+          switchuvm(p);
+          p->state = RUNNING;
+          swtch(&(c->scheduler), p->context);
+          switchkvm();
 
-    // Run highest priority
-    int priority;
-    int lowestPriorityToSearch = lastScheduled == -1 ? 4 : ptable.proc[i].priority;
-    for(priority = 0; priority < lowestPriorityToSearch; ++priority){
-      if(procToSchedForPriority[priority]){
-        p = procToSchedForPriority[priority];
-        break;
-      }
-    }
-    if(!p){
-      // Check if time-slice of last scheduled proc complete
-      // If so, bump priority and schedule next proc at same or lower priority
-      // If not, then look through rest of priorities
-      int timeSliceComplete = 1;
-      int pticks = ptable.proc[lastScheduled].ticks[ptable.proc[lastScheduled].priority];
-      switch(ptable.proc[lastScheduled].priority){
-        case 0:
-        case 1:
-          timeSliceComplete = (pticks % 5 == 0 && pticks != 0);
-          
-          break;
-        case 2:
-          timeSliceComplete = (pticks % 10 == 0 && pticks != 0);
-          break;
-        case 3:
-          timeSliceComplete = (pticks % 20 == 0 && pticks != 0);
-          break;
-      }
+          level = p->priority;
+          if((++p->ticks[level] >= time_slice[level] && level != 4) || (p->ticks[level]%16 == 0 && level == 4)){
+            if(proc_queue[level].head == proc_queue[level].tail){
+              proc_queue[level].head = 0;
+              proc_queue[level].tail = 0;
+            }
 
-      if(ptable.proc[lastScheduled].priority < 3){
-        ptable.proc[lastScheduled].priority += timeSliceComplete;
-      }
+            else if(proc_queue[level].head == p){
+              proc_queue[level].head = p->next;
+            }
 
-      if(!timeSliceComplete && ptable.proc[lastScheduled].state == RUNNABLE){
-        p = &ptable.proc[lastScheduled];
-      }
-      else{
-        // If there is no other proc at the last scheduled proc's priority,
-        // then we want to put the last run proc as the proc to run for that priority
-        if(!procToSchedForPriority[ptable.proc[lastScheduled].priority] && ptable.proc[lastScheduled].state == RUNNABLE)
-          procToSchedForPriority[ptable.proc[lastScheduled].priority] = &ptable.proc[lastScheduled];
-        // Check the rest of the priorities for a proc to run
-        for(; priority < 4; ++priority){
-          if(procToSchedForPriority[priority]){
-             p = procToSchedForPriority[priority];
-             break;
+            else {
+              prev->next = p->next;
+              if(proc_queue[level].tail == p){
+                proc_queue[level].tail = prev;
+              }
+            }
+
+
+            if(level != 4){
+              level = ++p->priority;
+            }
+
+            if(proc_queue[level].head == 0 && proc_queue[level].tail == 0){
+              proc_queue[level].head = p;
+              proc_queue[level].tail = p; 
+            } else{
+              proc_queue[level].tail->next = p;
+              proc_queue[level].tail = p;
+            }
+            p->next = 0;
           }
+          c->proc = 0;
+          i = -1;
+          break;
+        } else if(p->state == UNUSED){
+          level = p->priority;
+          if(proc_queue[level].head == proc_queue[level].tail){
+            proc_queue[level].head = 0;
+            proc_queue[level].tail = 0;
+            break;
+          } else if(proc_queue[level].head  == p){
+            proc_queue[level].head = p->next;
+            p = p->next;
+          } else {
+            prev->next = p->next;
+            if(proc_queue[level].tail == p){
+              proc_queue[level].tail = prev;
+              break;
+            }
+            p = p->next;
+          }
+        } else {
+          prev = p;
+          p = p->next;
         }
       }
-
-      if(!p){
-        // If still nothing else, then reschedule
-        p = &ptable.proc[lastScheduled];
-      }
     }
 
-    if(p){
-      p->lastScheduledOnTick = xticks;
-      lastScheduled = p - ptable.proc;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&(c->scheduler), c->proc->context);
-      switchkvm();
-    }
-
-    // Process is done running for now.
-    // It should have changed its p->state before coming back.
-    c->proc = 0;
-    release(&ptable.lock);
-    
+      release(&ptable.lock);
   }
 }
 #else
@@ -602,6 +643,7 @@ scheduler(void)
     }
 
     if(minp != 0){
+      //cprintf("Found Process\n");
       c->proc = minp;
       switchuvm(minp);
       minp->state = RUNNING;
@@ -837,6 +879,7 @@ procdump(void)
         cprintf(" %p", pc[i]);
     }
     cprintf(" %d",p->priority);
+    cprintf(" %d %d %d %d %d",p->ticks[0],p->ticks[1],p->ticks[2],p->ticks[3],p->ticks[4]);
     cprintf("\n");
   }
 }

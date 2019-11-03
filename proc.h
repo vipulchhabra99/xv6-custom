@@ -55,7 +55,8 @@ struct proc {
   int rtime;                   // Run Time
   int iotime;                  // I/o time
   int ticks[5];                // Ticks used in each row
-  int lastScheduledOnTick;     // Last Scheduled Tick
+  struct proc* next;           // Next Process
+  int lastScheduled;           // Last Scheduled 
 };
 
 // Process memory is laid out contiguously, low addresses first:
