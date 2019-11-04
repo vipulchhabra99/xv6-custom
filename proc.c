@@ -153,8 +153,6 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
-  p->ctime = ticks;
   p->etime = 0;
   p->iotime = 0;
   p->rtime = 0;
@@ -647,7 +645,7 @@ scheduler(void)
       c->proc = minp;
       switchuvm(minp);
       minp->state = RUNNING;
-      minp->rtime = ticks;
+      //minp->rtime = ticks;
       swtch(&(c->scheduler),c->proc->context);
       switchkvm();
     }
