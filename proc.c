@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "ProcessInfo.h"
+#include "procstat.h"
 
 
 struct {
@@ -14,14 +15,7 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct queue{
-  struct proc* head;
-  struct proc* tail;
-};
-
 static struct proc *initproc;
-
-struct queue proc_queue[5];
 
 int time_slice[5] = {1,2,4,8,16};
 
@@ -157,17 +151,7 @@ found:
   p->iotime = 0;
   p->rtime = 0;
   #ifdef MLFQ
-  p->ticks[0] = p->ticks[1] = p->ticks[2] = p->ticks[3] = 0;
-  if(proc_queue[0].head == 0 && proc_queue[0].tail == 0){
-    proc_queue[0].head = p;
-    proc_queue[0].tail = p;
-  }
-
-  else{
-    proc_queue[0].tail->next = p;
-    proc_queue[0].tail = p;
-  }
-  p->next = 0;
+  p->ticks[0] = p->ticks[1] = p->ticks[2] = p->ticks[3] = p->ticks[4] = 0;
   p->lastScheduled = ticks;
   #endif
   return p;
@@ -388,7 +372,7 @@ waitx(int *wtime,int *rtime)
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
-        *wtime = p->etime - p->ctime - p->rtime - p->iotime;
+        *wtime = p->etime - p->ctime - p->rtime;
         *rtime = p->rtime;
         pid = p->pid;
         kfree(p->kstack);
@@ -482,135 +466,136 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  int j;
-  int lastExecuted = -1;
+  //int j;
+  int lastExecuted = 0;
+  struct proc *exc;
 
   for(;;) {
     sti();
     acquire(&ptable.lock);
+    struct proc *processes_found[5] = {0};
 
-    int i,level;
+    int i;
 
-    for(i = 0;i < 5;i++){
-      struct proc *prev = 0;
+    for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
+      if(p->pid == lastExecuted || p->state != RUNNABLE)
+      continue;
 
-      if(ticks%100 == 0){
+      if(p->priority > 0 && (ticks-(p->lastScheduled)) > 150 && p->pid > 2){
+        p->priority--;
+        p->lastScheduled = ticks;
+        cprintf("Procees %d aged and new queue is %d\n",p->pid,p->priority);
+        break;
+      }
+    }
+ 
+    for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
       
-        for(j = 0;j < NPROC;++j){
-          if(ptable.proc[j].pid == lastExecuted || ptable.proc[j].state != RUNNABLE)
-          continue;
+      if(p->state != RUNNABLE){
+        continue;
+      }
+      
 
-          if(ptable.proc[j].priority > 0 && (ticks - ptable.proc[j].lastScheduled) >= 100){
-            level = ptable.proc[j].priority;
-            if((proc_queue[level].head == &ptable.proc[j]) && (proc_queue[level].tail == &ptable.proc[j])){
-              proc_queue[level].head = 0;
-              proc_queue[level].tail = 0;
-            }
+        if(p->priority != 4){
+          if(processes_found[p->priority] == 0){
+            processes_found[p->priority] = p;
+          } 
 
-            else if(proc_queue[level].head == &ptable.proc[j]){
-              proc_queue[level].head = ptable.proc[j].next;
-            }
-
-            else {
-  
-              struct proc *k;
-              for(k = proc_queue[level].head;k != 0;){
-                if(k->next == &ptable.proc[j]){
-                  k->next = ptable.proc[j].next;
-                  break;
-                }
-                else{
-                  k = k->next;
-                }
-              }
-            }
-
-            ptable.proc[j].priority--;
-            level = ptable.proc[j].priority;
-
-            if(proc_queue[level].head == 0 && proc_queue[level].tail == 0){
-              proc_queue[level].head = &ptable.proc[j];
-              proc_queue[level].tail = &ptable.proc[j]; 
-            } else{
-              proc_queue[level].tail->next = &ptable.proc[j];
-              proc_queue[level].tail = &ptable.proc[j];
-            }
-            i = -1;
-            break;
+          else if(p->ctime < processes_found[p->priority]->ctime && processes_found[p->priority]->state == RUNNABLE){
+            processes_found[p->priority] = p;
           }
         }
-      }
 
-      for(p = proc_queue[i].head;p != 0;){
-        if(p->state == RUNNABLE){
-          c->proc = p;
-          p->lastScheduled = ticks;
-          lastExecuted = p->pid;
-          switchuvm(p);
-          p->state = RUNNING;
-          swtch(&(c->scheduler), p->context);
-          switchkvm();
+        else{
+          if(processes_found[p->priority] == 0){
+            processes_found[p->priority] = p;
+          } 
 
-          level = p->priority;
-          if((++p->ticks[level] >= time_slice[level] && level != 4) || (p->ticks[level]%16 == 0 && level == 4)){
-            if(proc_queue[level].head == proc_queue[level].tail){
-              proc_queue[level].head = 0;
-              proc_queue[level].tail = 0;
+          else if(processes_found[p->priority]->lastScheduled > p->lastScheduled && processes_found[p->priority]->state == RUNNABLE){
+            processes_found[p->priority] = p;
+          }
+        }  
+    }
+
+    for(i = 0;i < 5;i++){
+      if(processes_found[i] != 0){
+
+        if(processes_found[i]->pid > 2){
+          int flag = 0;
+          while(processes_found[i]->state == RUNNABLE){
+              exc = processes_found[i];
+              c->proc = exc;
+              exc->ticks[i]++;
+              lastExecuted = processes_found[i]->pid;
+              //exc->lastScheduled = ticks;
+              switchuvm(exc);
+              exc->state = RUNNING;
+              //cprintf("%d ",c->proc->pid);
+              swtch(&(c->scheduler), exc->context);
+              switchkvm();
+              c->proc = 0;
+
+              if(exc->ticks[i]%time_slice[i] == 0 && exc->ticks[i] > time_slice[i])
+              break;
+
+              for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
+                if(p->state == RUNNABLE && p->priority < processes_found[i]->priority){
+                  flag = 1;
+                  break;
+                }
+              }
+              if(flag == 1)
+              break;   
+          }
+
+          if(processes_found[i]->ticks[i]%time_slice[i] == 0 && processes_found[i]->ticks[i] >= time_slice[i] && i != 4){
+                processes_found[i]->priority++;
+                processes_found[i]->lastScheduled = ticks;
+              }
+
+          if(i == 4){
+            if(processes_found[i]->ticks[i]%time_slice[i] == 0 && processes_found[i]->ticks[i] >= time_slice[i]){
+              processes_found[i]->lastScheduled = ticks;
             }
+          }
+          break;
+        }
 
-            else if(proc_queue[level].head == p){
-              proc_queue[level].head = p->next;
-            }
+        else {
+          int flag = 0;
+          while(processes_found[i]->state == RUNNABLE){
 
-            else {
-              prev->next = p->next;
-              if(proc_queue[level].tail == p){
-                proc_queue[level].tail = prev;
+            exc = processes_found[i];
+            c->proc = exc;
+            //exc->ticks[i]++;
+              //exc->lastScheduled = ticks;
+            switchuvm(exc);
+            lastExecuted = processes_found[i]->pid;
+            //cprintf("%d ",c->proc->pid);
+            exc->state = RUNNING;
+            swtch(&(c->scheduler), exc->context);
+            switchkvm();
+            c->proc = 0;
+
+            for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
+              if(p->state == RUNNABLE && p->priority < processes_found[i]->priority){
+                  flag = 1;
+                  break;
               }
             }
 
-
-            if(level != 4){
-              level = ++p->priority;
-            }
-
-            if(proc_queue[level].head == 0 && proc_queue[level].tail == 0){
-              proc_queue[level].head = p;
-              proc_queue[level].tail = p; 
-            } else{
-              proc_queue[level].tail->next = p;
-              proc_queue[level].tail = p;
-            }
-            p->next = 0;
-          }
-          c->proc = 0;
-          i = -1;
-          break;
-        } else if(p->state == UNUSED){
-          level = p->priority;
-          if(proc_queue[level].head == proc_queue[level].tail){
-            proc_queue[level].head = 0;
-            proc_queue[level].tail = 0;
+            if(processes_found[i]->state == SLEEPING)
             break;
-          } else if(proc_queue[level].head  == p){
-            proc_queue[level].head = p->next;
-            p = p->next;
-          } else {
-            prev->next = p->next;
-            if(proc_queue[level].tail == p){
-              proc_queue[level].tail = prev;
-              break;
-            }
-            p = p->next;
+
+            if(flag == 1)
+            break;
           }
-        } else {
-          prev = p;
-          p = p->next;
+          break;
         }
       }
     }
 
-      release(&ptable.lock);
+    release(&ptable.lock);
   }
 }
 #else
@@ -639,9 +624,9 @@ scheduler(void)
           minp = p;
         }
     }
-
+    //cprintf("Switching from %d\n",c->proc->pid);
     if(minp != 0){
-      //cprintf("Found Process\n");
+      //cprintf("Switching from ");
       c->proc = minp;
       switchuvm(minp);
       minp->state = RUNNING;
@@ -917,4 +902,31 @@ getprocs(struct ProcessInfo* processInfoTable){
   p = 0;
   return count;
 
+}
+
+int getpinfo(int *pid,struct proc_stat *status) {
+  
+  struct proc *p;
+  int found = 0;
+  for(p = ptable.proc;p < &ptable.proc[NPROC];p++){
+    if((p->pid) == *pid){
+      found  = 1;
+      status->pid = p->pid;
+      //cprintf("%d   ",status->pid);
+      status->runtime = p->rtime;
+      //cprintf("%d  ",status->runtime);
+      status->num_run = 1;
+      status->current_queue = p->priority;
+      for(int i = 0;i < 5;i++){
+        status->ticks[i] = p->ticks[i];
+      }
+      break;
+    }
+  }
+
+  if(found == 0){
+    cprintf("No process exist with given pid");
+  }
+
+  return 0;
 }

@@ -7,6 +7,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "ProcessInfo.h"
+#include "procstat.h"
 
 
 int
@@ -45,6 +46,34 @@ sys_waitx(void)
   else{
     return waitx(wtime,rtime);
   }
+}
+
+int
+sys_getpinfo(void){
+
+  int *pid;
+  struct proc_stat *proc = 0;
+
+  if(argptr(0,(char**)&pid,sizeof(int)) < 0){
+    return -1;
+  }
+
+  if(argptr(0,(char**)&proc,sizeof(struct proc_stat *)) < 0){
+    return -1;
+  }
+
+  if(proc == 0){
+    return -1;
+  }
+
+  getpinfo(pid,proc);
+  cprintf("Pid : %d\n",proc->pid);
+  cprintf("Run-time : %d\n",proc->runtime);
+  cprintf("Number Of Times Executed : %d\n",proc->num_run);
+  cprintf("Current Queue : %d\n",proc->current_queue);
+  cprintf("Number of Ticks Recieved in Each Queue : %d %d %d %d %d \n",proc->ticks[0],proc->ticks[1],proc->ticks[2],proc->ticks[3],proc->ticks[4]);
+  return 0;
+
 }
 
 int

@@ -1,4 +1,5 @@
 #include "ProcessInfo.h"
+#include "procstat.h"
 struct stat;
 struct rtcdate;
 
@@ -28,6 +29,7 @@ int waitx(int *wtime , int *rtime );
 int setpriority(int,int);
 int getptable(int, void *);
 int getprocs(struct ProcessInfo* processInfoTable);
+int getpinfo(int *pid,struct proc_stat *status);
 
 // ulib.c
 int stat(const char*, struct stat*);

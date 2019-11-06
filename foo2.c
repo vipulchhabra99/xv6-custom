@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     double x=0, z;
 
     if(argc < 2)
-        n = 200;  // default value
+        n = 80;  // default value
     else
         n = atoi(argv[1]);  // from user input
     if(n<0 || n>100)
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
         else
         {   // Child
             //printf(1, "Child %d created\n", getpid());
-            for(z=0;z<10000.0;z+=0.1)
+            for(z=0;z<10000.0;z+=0.01)
                 x = x + 3.14*69.69; // Useless calculations to consume CPU time
             break;
         }

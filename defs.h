@@ -10,6 +10,7 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct ProcessInfo;
+struct proc_stat;
 
 // bio.c
 void            binit(void);
@@ -123,6 +124,7 @@ void            wakeup(void*);
 void            yield(void);
 int             waitx(int *,int *);
 int 			getprocs(struct ProcessInfo*);
+int             getpinfo(int *pid,struct proc_stat *status);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

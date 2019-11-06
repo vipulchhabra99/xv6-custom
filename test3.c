@@ -13,6 +13,6 @@ int main(int argc,char* argv[]){
         int y = atoi(argv[2]);
         setpriority(x,y);
     }
-
+    exit();
     return 0;
 }

@@ -24,3 +24,4 @@
 #define SYS_setpriority 23
 #define SYS_getprocs 24
 #define SYS_getptable 25
+#define SYS_getpinfo 26
