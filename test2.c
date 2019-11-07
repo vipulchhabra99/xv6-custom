@@ -5,21 +5,83 @@
 
 int main(){
     printf(1,"Priority Based Scheduler Testing\n");
+
+    int x,a,b;
+
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
     
     if(fork() == 0){
-        int x;
-        for(int i = 0;i < 10000000;i++){
-            x = 3.14*89.23;
-        }
-        return x;
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
     }
 
     if(fork() == 0){
-        float x;
-        for(int i = 0;i < 10000000;i++){
-            x = 3.14*89.23;
-        }
-        //printf(1,"%f",x);
-        return x;
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
     }
+    
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+    
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+    
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+    
+    if(fork() == 0){
+        for(float z=0;z<100000.0;z+=0.01)
+		x = x + 3.14*69.69;
+    }
+    
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+    waitx(&a,&b);
+    printf(1,"%d %d\n",a,b);
+
+    exit();
 }

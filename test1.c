@@ -63,6 +63,7 @@ int main(int argc, char* argv[])
             // printf(1,"parent waiting; childPid: %d\n", childPids[i]);
             // status = wait(); 
             // printf(1,"parent waited %d\n",status);
+            //setpriority(childPids[i],(50+MAXNUMCHILDREN) - 2*i);
             if(i == MAXNUMCHILDREN -1){
                 CleanupChildren();
                 PrintTestResult();
@@ -70,7 +71,6 @@ int main(int argc, char* argv[])
             continue;
         }else{
             
-            setpriority(childPids[i],(60+MAXNUMCHILDREN) - i);
             for (int j = 0; j < 100000; j++){
                 if(j%1000 == 0)
                     printf(0, "childNum: %d round: %d\n",i, j);
@@ -88,8 +88,9 @@ int main(int argc, char* argv[])
 
 void CleanupChildren(){
     int childReturn = -5;
+    int a,b;
     for(int i = 0; i <MAXNUMCHILDREN; i++){
-        while((childReturn = wait()) < 0);
+        while((childReturn = waitx(&a,&b)) < 0);
         printf(1,"Child wait recieved: %d\n", childReturn);
         int childIndex = FindChild(childReturn);
         childFinishRank[i] = childIndex;

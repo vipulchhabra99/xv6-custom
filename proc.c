@@ -150,6 +150,8 @@ found:
   p->etime = 0;
   p->iotime = 0;
   p->rtime = 0;
+  p->num_of_execution = 1;
+  p->lastActualWorking = ticks;
   #ifdef MLFQ
   p->ticks[0] = p->ticks[1] = p->ticks[2] = p->ticks[3] = p->ticks[4] = 0;
   p->lastScheduled = ticks;
@@ -374,6 +376,7 @@ waitx(int *wtime,int *rtime)
         // Found one.
         *wtime = p->etime - p->ctime - p->rtime;
         *rtime = p->rtime;
+        cprintf("Waiting time : %d Turn Around Time : %d\n",*wtime,p->etime);
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
@@ -481,9 +484,9 @@ scheduler(void)
       if(p->pid == lastExecuted || p->state != RUNNABLE)
       continue;
 
-      if(p->priority > 0 && (ticks-(p->lastScheduled)) > 150 && p->pid > 2){
+      if(p->priority > 0 && (ticks-(p->lastActualWorking)) > 250 && p->pid > 2){
         p->priority--;
-        p->lastScheduled = ticks;
+        p->lastActualWorking = ticks;
         cprintf("Procees %d aged and new queue is %d\n",p->pid,p->priority);
         break;
       }
@@ -495,7 +498,6 @@ scheduler(void)
         continue;
       }
       
-
         if(p->priority != 4){
           if(processes_found[p->priority] == 0){
             processes_found[p->priority] = p;
@@ -527,6 +529,7 @@ scheduler(void)
               c->proc = exc;
               exc->ticks[i]++;
               lastExecuted = processes_found[i]->pid;
+              exc->lastActualWorking = ticks;
               //exc->lastScheduled = ticks;
               switchuvm(exc);
               exc->state = RUNNING;
@@ -551,13 +554,16 @@ scheduler(void)
           if(processes_found[i]->ticks[i]%time_slice[i] == 0 && processes_found[i]->ticks[i] >= time_slice[i] && i != 4){
                 processes_found[i]->priority++;
                 processes_found[i]->lastScheduled = ticks;
+                processes_found[i]->lastActualWorking = ticks;
               }
 
           if(i == 4){
             if(processes_found[i]->ticks[i]%time_slice[i] == 0 && processes_found[i]->ticks[i] >= time_slice[i]){
               processes_found[i]->lastScheduled = ticks;
+              processes_found[i]->lastActualWorking = ticks;
             }
           }
+          processes_found[i]->num_of_execution++;
           break;
         }
 
@@ -567,6 +573,7 @@ scheduler(void)
 
             exc = processes_found[i];
             c->proc = exc;
+            exc->lastActualWorking = ticks;
             //exc->ticks[i]++;
               //exc->lastScheduled = ticks;
             switchuvm(exc);
@@ -590,6 +597,7 @@ scheduler(void)
             if(flag == 1)
             break;
           }
+          processes_found[i]->num_of_execution++;
           break;
         }
       }
@@ -664,7 +672,7 @@ scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-
+      //cprintf("Process %d with pid running\n", p->pid);
       if(p > 0){
         c->proc = p;
         switchuvm(p);
@@ -915,7 +923,7 @@ int getpinfo(int *pid,struct proc_stat *status) {
       //cprintf("%d   ",status->pid);
       status->runtime = p->rtime;
       //cprintf("%d  ",status->runtime);
-      status->num_run = 1;
+      status->num_run = p->num_of_execution;
       status->current_queue = p->priority;
       for(int i = 0;i < 5;i++){
         status->ticks[i] = p->ticks[i];
