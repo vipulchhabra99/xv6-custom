@@ -376,7 +376,7 @@ waitx(int *wtime,int *rtime)
         // Found one.
         *wtime = p->etime - p->ctime - p->rtime;
         *rtime = p->rtime;
-        cprintf("Waiting time : %d Turn Around Time : %d\n",*wtime,p->etime);
+        //cprintf("Waiting time : %d Turn Around Time : %d\n",*wtime,p->etime);
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
