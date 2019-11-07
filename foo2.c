@@ -9,11 +9,10 @@ int main(int argc, char *argv[])
     double x=0, z;
 
     if(argc < 2)
-        n = 80;  // default value
+    n = 80;
+
     else
-        n = atoi(argv[1]);  // from user input
-    if(n<0 || n>100)
-        n = 2;
+    n = atoi(argv[1]);
 
     x = 0;
     id = 0;
@@ -23,15 +22,13 @@ int main(int argc, char *argv[])
         if(id < 0)
             printf(1, "%d failed in fork!\n", getpid());
         else if(id > 0)
-        {   // Parent
-            //printf(1, "Parent %d creating child %d\n", getpid(), id);
+        {   
             wait();
         }
         else
-        {   // Child
-            //printf(1, "Child %d created\n", getpid());
+        {   
             for(z=0;z<10000.0;z+=0.01)
-                x = x + 3.14*69.69; // Useless calculations to consume CPU time
+                x = x + 34.14*24.13; 
             break;
         }
     }

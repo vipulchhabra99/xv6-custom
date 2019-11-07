@@ -42,86 +42,69 @@ int main(int argc, char **argv) {
   return 0;
 }*/
 
-#define MAXNUMCHILDREN 10
+#define PROCESSES 10
 
-void CleanupChildren();
-int FindChild(int);
-void PrintTestResult();
+int ranks[PROCESSES];
+int pids [PROCESSES];
 
-int childFinishRank[MAXNUMCHILDREN];
-int childPids [MAXNUMCHILDREN];
+int findchild(int childPid){
+    int curPid = 0;
+    int i = 0;
+    while(i < PROCESSES){
+        curPid = pids[i];
+        if (curPid == childPid)
+            return i;
+
+        i++;
+    }
+    return -1;
+}
+
+void status_check(){
+    int childReturn = -1;
+    int a,b,i = 0;
+    while(i < PROCESSES){
+        while((childReturn = waitx(&a,&b)) < 0);
+        int childIndex = findchild(childReturn);
+        ranks[i] = childIndex;
+        i++;
+    }
+}
+
+
 
 int main(int argc, char* argv[])
 {
-    
-    printf(1, "prioSet made it\n");
-    
-    
-    // int status = -1;
-    for(int i = 0; i < MAXNUMCHILDREN;i++){
-        if((childPids[i] = fork() )> 0){
-            // printf(1,"parent waiting; childPid: %d\n", childPids[i]);
-            // status = wait(); 
-            // printf(1,"parent waited %d\n",status);
-            //setpriority(childPids[i],(50+MAXNUMCHILDREN) - 2*i);
-            if(i == MAXNUMCHILDREN -1){
-                CleanupChildren();
-                PrintTestResult();
+
+    for(int i = 0; i < PROCESSES;i++){
+        if((pids[i] = fork())> 0){
+            //setpriority(pids[i],(50+PROCESSES) - 2*i); // To set the priorites in case of priority scheduling
+            if(i == PROCESSES -1){
+                status_check();
+                printf(1,"TEST RESULTS\n");
+                printf(1,"========================\n");
+                for(int i = 0; i < PROCESSES; i++){
+                    printf(1,"Child: %d Rank: %d\n",ranks[i], i);
+                }
+                printf(1,"========================\n");
             }
             continue;
         }else{
             
             for (int j = 0; j < 100000; j++){
                 if(j%1000 == 0)
-                    printf(0, "childNum: %d round: %d\n",i, j);
-                int x = 1000000000;
-                while (x > 0){
-                    x = (int)(x/100000000000);
-                } 
+                    printf(0, "Child number %d executing\n",i);
+
+                for(float j = 0;j < 10000; j += 0.0001); 
             }
-            printf(2,"FINSHED childNum %d\n", i);
+            printf(2,"Child %d finished execution\n", i);
             break;
         }
     }    
     exit();
 }
 
-void CleanupChildren(){
-    int childReturn = -5;
-    int a,b;
-    for(int i = 0; i <MAXNUMCHILDREN; i++){
-        while((childReturn = waitx(&a,&b)) < 0);
-        printf(1,"Child wait recieved: %d\n", childReturn);
-        int childIndex = FindChild(childReturn);
-        childFinishRank[i] = childIndex;
-    }
-}
 
-int FindChild(int childPid){
-    int curPid = -12;
-    for(int i = 0; i < MAXNUMCHILDREN; i++){
-        curPid = childPids[i];
-        if (curPid == childPid)
-            return i;
-    }
-    return -12;
-}
-
-void PrintTestResult(){
-    printf(1,"\n\n=================\n");
-    printf(1,"TEST Description:\n");
-    printf(1,"\tParent process creates 10 child processes which print to the screen every 1000 iterations.\n");
-    printf(1,"\tWhen a child completes its work it gets added to a completition rank array.\n");
-    printf(1,"\tResults a printed when all child processes complete.\n");
-    printf(1,"==========================================================\n");
-    printf(1,"\n============\n");
-    printf(1,"TEST RESULTS\n");
-    printf(1,"============\n");
-    for(int i = 0; i < MAXNUMCHILDREN; i++){
-        printf(1,"Child: %d Rank: %d\n",childFinishRank[i], i);
-    }
-    printf(1,"========================\n");
-}
 
 
 
@@ -132,10 +115,6 @@ void PrintTestResult(){
             for (int j = 0; j < 10000; j++){
                 if(j%1000 == 0)
                     printf(0, "childNum: %d round: %d\n",0, j);
-                int x = 1000000000;
-                while (x > 0){
-                    x = (int)(x/100000000000);
-                } 
             }
     }
 
