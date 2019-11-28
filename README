@@ -4,6 +4,7 @@ The original xv6 is modified and the following changes are made
 1) Added support for different scheduling algorithms and user can decide which algorithm to use.
 2) Added waitx, getpinfo and setpriority
 
-```c
-make
+```python
+s = "Python syntax highlighting"
+print s
 ```
